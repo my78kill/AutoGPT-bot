@@ -1,50 +1,65 @@
+import os
 import pickle
 import openai
 import telebot
+from dotenv import load_dotenv
 
-openai.api_key = "OPENAI_API_KEY"
-telegram_key = "TELEGRAM_API_KEY"
+# Load environment variables from .env (optional, good for local dev)
+load_dotenv()
+
+# Fetch API keys from environment
+openai.api_key = os.getenv("openai_key")
+telegram_key = os.getenv("telegram_key")
+
+# Check if token is loaded properly
+if not telegram_key or ":" not in telegram_key:
+    raise ValueError("TELEGRAM API KEY is missing or invalid (should contain ':')")
 
 bot = telebot.TeleBot(telegram_key)
 
-def Generate_Respose(prompt):
+def Generate_Response(prompt):
     try:
-        completions = openai.Completion.create(
+        completion = openai.Completion.create(
             engine="text-davinci-003",
             prompt=prompt,
             max_tokens=150
         )
-    except:
-        return "Openai server encountered a real time problem.\nPlease try again in some moments"
-    message = completions.choices[0].text
-    message = message.lstrip()
-    return message
+        message = completion.choices[0].text.lstrip()
+        return message
+    except Exception as e:
+        print("OpenAI Error:", e)
+        return "OpenAI server encountered a real-time problem. Please try again later."
 
-
+# Handle voice messages
 @bot.message_handler(content_types=['voice'])
 def voice_processing(message):
-    bot.reply_to(message, "Sorry, but I can't handle voice messages yet. I'm working on it.")
+    bot.reply_to(message, "Sorry, I can't handle voice messages yet. I'm still learning!")
 
+# Handle all other text messages
 @bot.message_handler(func=lambda msg: True)
-def echo_all(prompt):
+def echo_all(message):
+    username = message.from_user.username or str(message.from_user.id)
+    history_file = f'prompt_history/{username}'
+
     try:
-        prompt_history = pickle.load(open(f'prompt_history/{prompt.from_user.username}', 'rb'))
+        prompt_history = pickle.load(open(history_file, 'rb'))
     except:
-        prompt_history = " "
+        prompt_history = ""
 
-    temp = prompt_history + "\n" + prompt.text
-    response = Generate_Respose(temp)
+    user_input = message.text
+    temp = prompt_history + "\nUser: " + user_input
+    response = Generate_Response(temp)
 
-    prompt_history += f'\nUser: {prompt.text}'
+    if response:
+        response = response.replace("Ai: ", "").lstrip()
+        bot.reply_to(message, response)
+        prompt_history += f'\nUser: {user_input}\nAi: {response}'
 
-    if len(response) > 0:
-        response = response.lstrip("Ai: ")
-        response = response.replace("Ai: ", "")
-        bot.reply_to(prompt, response)
-        prompt_history += f'\nAi: {response}'
+    # Save updated history
+    os.makedirs('prompt_history', exist_ok=True)
+    with open(history_file, "wb") as f:
+        pickle.dump(prompt_history, f)
 
-    f = open(f'prompt_history/{(prompt.from_user).username}', "wb")
-    pickle.dump(prompt_history, f)
-    f.close()
-
+# Start the bot
+print("Bot is running...")
 bot.infinity_polling()
