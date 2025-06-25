@@ -1,22 +1,27 @@
+# Import and run Flask to keep Render alive
+from keep_alive import keep_alive
+keep_alive()
+
 import os
 import pickle
 import openai
 import telebot
 from dotenv import load_dotenv
 
-# Load environment variables from .env (optional, good for local dev)
+# Load environment variables
 load_dotenv()
 
-# Fetch API keys from environment
+# Get keys from environment
 openai.api_key = os.getenv("openai_key")
 telegram_key = os.getenv("telegram_key")
 
-# Check if token is loaded properly
+# Validate Telegram key format
 if not telegram_key or ":" not in telegram_key:
     raise ValueError("TELEGRAM API KEY is missing or invalid (should contain ':')")
 
 bot = telebot.TeleBot(telegram_key)
 
+# OpenAI response generation
 def Generate_Response(prompt):
     try:
         completion = openai.Completion.create(
